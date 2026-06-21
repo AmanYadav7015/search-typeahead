@@ -1,0 +1,17 @@
+# Keep the build context lean (see guidelines/docker_best_practices §6).
+.git/
+.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# Generated at build time / runtime — not shipped in the context:
+data/                 # synthetic queries.csv is regenerated inside the image
+*.db
+*.db-wal
+*.db-shm
+
+# Not needed at runtime:
+docs/                 # screenshots + markdown (big PNGs)
+*.log
+.DS_Store

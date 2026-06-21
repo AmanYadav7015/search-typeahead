@@ -1,0 +1,19 @@
+# Dev baseline — runs native on the host arch (no `platform:` set, per
+# guidelines/docker_best_practices §11). Single service: the FastAPI app
+# serves both the API and the static frontend.
+services:
+  typeahead:
+    build:
+      context: .
+    image: search-typeahead:latest
+    container_name: search-typeahead
+    ports:
+      - "8765:8765"          # only port that needs host access
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health')"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
