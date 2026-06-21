@@ -1,0 +1,14 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Generated dataset + SQLite store (regenerate deterministically on boot;
+# the source of truth is backend/data_loader.py)
+data/queries.csv
+data/typeahead.db
+data/typeahead.db-wal
+data/typeahead.db-shm
+
+# OS
+.DS_Store
