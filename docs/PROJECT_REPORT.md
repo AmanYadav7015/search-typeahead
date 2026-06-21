@@ -80,7 +80,8 @@ playbook: absorb reads in the cache, optimize the store for writes.
 | `backend/consistent_hash.py` | Hash ring with virtual nodes |
 | `backend/batch_writer.py` | Thread-safe buffer + size/interval flush loop |
 | `backend/trending.py` | EMA recency tracker + combined scoring |
-| `backend/data_loader.py` | CSV ingestion + synthetic dataset generator |
+| `backend/fetch_dataset.py` | Downloads the real Wikipedia-pageviews dataset → `data/queries.csv` |
+| `backend/data_loader.py` | CSV ingestion + synthetic dataset generator (offline fallback) |
 | `frontend/` | Dark "engineering console" UI (vanilla JS) |
 
 ---
@@ -92,34 +93,48 @@ optional), matching the assignment's expected input format:
 
 ```
 query,count
-iphone,385243
-iphone charger,4120
-java tutorial,32732
+2024 indian general election,8118
+cleopatra,7639
+donald trump,4468
+iphone,218
 ...
 ```
 
-**Source (default).** A **synthetic** dataset of **120,000** queries is
-generated on first boot by `backend/data_loader.py` (`_synthesize_dataset`)
-if `data/queries.csv` is absent. It mixes realistic e-commerce / how-to /
-tutorial / news / places queries with a **Zipfian** count distribution
-(a few very popular queries, a long tail of rare ones) — the same shape
-as real search traffic. It is seeded (`random.Random(42)`), so every run
-produces the identical dataset. This satisfies §3 (≥100k queries, with
-counts). In the Docker image the dataset is baked in at build time.
+**Source — real, open-source: Wikipedia pageviews.** The dataset is
+built from a **Wikimedia hourly pageviews dump** (CC0-licensed) by
+`backend/fetch_dataset.py`. It downloads a *pinned* historical hour
+(`2024-06-01 12:00 UTC`, so the result is reproducible), keeps English
+Wikipedia article titles, cleans them into search-query-like text
+(drops namespaces like `File:`/`Talk:`, lower-cases, `_`→space,
+URL-decodes), aggregates view counts, and writes the **top 150,000**
+titles by views:
+
+```bash
+cd backend && ../.venv/bin/python fetch_dataset.py
+# scans ~6.6M lines, keeps ~1.5M English rows, writes 150,000 query,count rows
+```
+
+Wikipedia **page titles + pageview counts** are exactly one of the entry
+types §3 allows, the counts are real (head-heavy, like true search
+traffic — `2024 indian general election` 8118, `cleopatra` 7639, …), and
+150k comfortably exceeds the 100k minimum.
+
+**Synthetic fallback (no network).** If `fetch_dataset.py` can't reach
+Wikimedia, `backend/data_loader.py` (`_synthesize_dataset`) generates a
+deterministic, seeded 120k-query Zipfian dataset instead, so the project
+always runs. The Docker build tries the real fetch first and falls back
+to synthetic automatically.
 
 **Loading.** On startup, `load_into()`:
-1. bulk-loads the CSV into the SQLite frequency DB (`INSERT OR REPLACE`);
+1. bulk-loads `data/queries.csv` into the SQLite frequency DB (`INSERT OR REPLACE`);
 2. seeds the in-memory recency tracker with each query's baseline count.
 
-The suggestion cache is **not** preloaded — it fills lazily on the first
-read of each prefix (and is kept warm thereafter).
+The CSV is generated only if missing; the suggestion cache is **not**
+preloaded — it fills lazily on the first read of each prefix.
 
-**Using a real open-source dataset.** Drop any `query,count` CSV at
-`data/queries.csv` before first boot and it is loaded as-is (the
-synthesizer only runs when the file is missing). Good sources: AOL
-search logs, Google Trends exports, Wikipedia page titles + pageview
-counts, an Amazon product-title dump. With Docker, mount it:
-`docker run -p 8765:8765 -v /path/to/data:/app/data search-typeahead`.
+**Using a different dataset.** Drop any `query,count` CSV at
+`data/queries.csv` before first boot and it is loaded as-is. With Docker,
+mount it: `docker run -p 8765:8765 -v /path/to/data:/app/data search-typeahead`.
 
 ---
 
@@ -134,15 +149,15 @@ Top-10 suggestions for a prefix. `mode` defaults to `recency`; an
 invalid value returns **422**.
 
 ```jsonc
-// GET /suggest?q=iph&mode=popularity
+// GET /suggest?q=the&mode=popularity
 {
-  "prefix": "iph",
+  "prefix": "the",
   "mode": "popularity",
   "source": "miss",                 // "hit" | "miss" | "empty"
   "cache_node": "cache-node-B",     // which shard owns this prefix
   "suggestions": [
-    {"query": "iphone", "score": 385243.0, "count": 385243},
-    {"query": "iphone 8", "score": 78563.0, "count": 78563}
+    {"query": "the first omen", "score": 2113.0, "count": 2113},
+    {"query": "the garfield movie", "score": 1035.0, "count": 1035}
     // … up to 10, sorted by score (count for popularity)
   ],
   "latency_ms": 1.21
@@ -287,7 +302,7 @@ at `flush_batch_size`).
 
 ## 5. Performance report
 
-**Setup.** 120,000 queries, single Uvicorn worker, Apple-Silicon laptop.
+**Setup.** 150,000 real Wikipedia queries, single Uvicorn worker, Apple-Silicon laptop.
 Reproduce with `python backend/bench.py 2500` (load test) and
 `python backend/test_e2e.py` (33-check functional suite). Live numbers
 are at `GET /stats` and on the UI telemetry tiles.

@@ -26,12 +26,13 @@ COPY --from=builder /install /usr/local
 COPY backend/ /app/backend/
 COPY frontend/ /app/frontend/
 
-# Bake the deterministic synthetic dataset into the image so the first
-# request is fast and the container is fully self-contained (no network).
-RUN mkdir -p /app/data && \
-    python -c "import sys; sys.path.insert(0, '/app/backend'); \
-from data_loader import _synthesize_dataset; \
-_synthesize_dataset('/app/data/queries.csv')"
+# Bake the dataset into the image so the first request is fast and the
+# container is self-contained (no network at runtime). Prefer the REAL
+# Wikipedia-pageviews dataset (pinned, reproducible); if the build host
+# has no network, fall back to the deterministic synthetic generator.
+RUN mkdir -p /app/data && cd /app/backend && \
+    ( python fetch_dataset.py \
+      || python -c "from data_loader import _synthesize_dataset; _synthesize_dataset('/app/data/queries.csv')" )
 
 # Run as a non-root user; /app must be writable for the SQLite DB.
 RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
