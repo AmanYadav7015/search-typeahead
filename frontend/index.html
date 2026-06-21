@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Typeahead Console — Aman Yadav (24bcs10183)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/ui/style.css" />
+</head>
+<body>
+<div class="page">
+
+  <!-- ───────── TOPBAR ───────── -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06140d" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M21 21l-4.6-4.6"></path></svg>
+      </div>
+      <div class="brand-name">Typeahead</div>
+      <div class="chip">HLD-101</div>
+      <div class="chip author-chip">Aman Yadav · 24bcs10183 · B</div>
+    </div>
+    <div class="live">
+      <span class="live-dot"></span>
+      live · <span id="storeSize">…</span> queries indexed
+    </div>
+  </header>
+
+  <!-- ───────── HERO ───────── -->
+  <section class="hero">
+    <div class="eyebrow">Search Typeahead System</div>
+    <h1>Suggestions in <span class="accent">single-digit</span> milliseconds.</h1>
+    <p class="lede">Prefix-matched, count-ranked, cache-served. Type below to watch the
+       consistent-hash router, batch buffer, and recency ranking work in real time.</p>
+
+    <!-- SEARCH BOX -->
+    <div class="search-area">
+      <div class="search-box" id="searchBox">
+        <svg class="s-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M21 21l-4.6-4.6"></path></svg>
+        <input id="search" autocomplete="off" spellcheck="false" placeholder="Search products, queries, docs…" />
+        <button id="clearBtn" class="clear-btn hidden" title="Clear">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+        </button>
+        <button id="goBtn" class="go-btn">Search</button>
+        <div id="loadBar" class="load-bar"></div>
+      </div>
+
+      <!-- ERROR STATE -->
+      <div id="errBanner" class="err-banner hidden">
+        <span id="errMsg"></span>
+        <button id="errDismiss">dismiss</button>
+      </div>
+
+      <!-- DROPDOWN -->
+      <div id="dropdown" class="dropdown hidden">
+        <div id="dropdownRows"></div>
+        <div class="dropdown-foot">
+          <span>↑↓ navigate · ⏎ select · esc close</span>
+          <span id="ddTag" class="tag"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- helper row -->
+    <div class="helper">
+      <span class="mono faint" id="helperLeft">debounced 180ms · top 10 · prefix match</span>
+      <div class="seg">
+        <button id="segPop" class="seg-btn">Popularity</button>
+        <button id="segRec" class="seg-btn on">Recency-aware</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── SEARCH RESULT ───────── -->
+  <section id="searchResult" class="result-wrap hidden">
+    <div class="result-card">
+      <div class="result-rail"></div>
+      <div class="result-main">
+        <div class="mono micro faint">POST /search · 200 OK</div>
+        <div class="result-line">Searched <span id="resQuery" class="accent mono"></span>
+          <span id="resNote" class="muted small"></span></div>
+      </div>
+      <pre id="resJson" class="result-json"></pre>
+    </div>
+  </section>
+
+  <!-- ───────── TELEMETRY ───────── -->
+  <section class="section">
+    <div class="section-label">System telemetry</div>
+    <div class="tiles">
+      <div class="tile"><div class="t-k">p95 latency</div><div class="t-v accent" id="m-p95">—</div><div class="t-sub" id="m-avg">avg —</div></div>
+      <div class="tile"><div class="t-k">cache hit rate</div><div class="t-v" id="m-hit">—</div><div class="t-sub" id="m-hitsub">— hits / — miss</div></div>
+      <div class="tile"><div class="t-k">DB reads</div><div class="t-v" id="m-reads">—</div><div class="t-sub">range-scan fallbacks (cache miss)</div></div>
+      <div class="tile"><div class="t-k">DB writes</div><div class="t-v" id="m-writes">—</div><div class="t-sub" id="m-writesub">— submits batched</div></div>
+      <div class="tile"><div class="t-k">writes saved</div><div class="t-v indigo" id="m-saved">—</div><div class="t-sub">via batching</div></div>
+    </div>
+  </section>
+
+  <!-- ───────── 3-COL PANELS ───────── -->
+  <section class="panels">
+
+    <!-- TRENDING -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">Trending now</div>
+        <div class="badge accent-badge">RECENCY-WEIGHTED</div>
+      </div>
+      <div class="mono micro faint mb">EMA decay · ~21 min half-life</div>
+      <div id="trending" class="trending"></div>
+    </div>
+
+    <!-- INSPECTOR + BATCH -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">Request inspector</div>
+        <div class="mono micro faint">GET /suggest</div>
+      </div>
+      <div id="inspector" class="inspector empty">start typing to route a prefix key…</div>
+
+      <div class="batch">
+        <div class="panel-head tight">
+          <div class="panel-subtitle">Batch write buffer</div>
+          <div class="mono micro faint" id="batchFlush">flush @ … or 2s</div>
+        </div>
+        <div class="buf-track" id="bufTrack"><div class="buf-bar" id="bufBar"></div></div>
+        <div class="buf-meta">
+          <span id="bufCount">0 / … buffered</span>
+          <span class="faint" id="bufExtra">aggregated before write</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONSISTENT HASH RING -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">Consistent hashing</div>
+        <div class="mono micro faint">GET /cache/debug</div>
+      </div>
+      <div class="ring-holder"><div id="ringSvg"></div></div>
+      <div id="nodeLegend" class="legend"></div>
+    </div>
+  </section>
+
+  <!-- ───────── API FOOTER ───────── -->
+  <footer class="api-foot">
+    <span class="mono micro faint">endpoints</span>
+    <span class="ep"><span class="accent">GET</span> /suggest?q=&lt;prefix&gt;&amp;mode=</span>
+    <span class="ep"><span class="indigo">POST</span> /search</span>
+    <span class="ep"><span class="amber">GET</span> /cache/debug?prefix=&lt;prefix&gt;</span>
+    <span class="ep"><span class="pink">GET</span> /trending</span>
+    <span class="ep"><span class="muted">GET</span> /stats</span>
+  </footer>
+
+</div>
+<script src="/ui/app.js"></script>
+</body>
+</html>
